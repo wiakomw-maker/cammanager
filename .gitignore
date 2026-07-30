@@ -1,0 +1,32 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Logs
+*.log
+
+# PostgreSQL
+database/data/
+
+# Docker
+*.pid
+
+# VSCode
+.vscode/
+
+# Node
+node_modules/
+
+# React
+dist/
+build/
+
+# macOS
+.DS_Store
