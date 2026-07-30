@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 from xml.etree import ElementTree
@@ -99,7 +100,6 @@ class HikvisionClient:
             channel = _as_int(_text(element, "id"))
             if channel is None:
                 continue
-            status = (_text(element, "online") or _text(element, "status") or "false").lower()
             channels.append(
                 {
                     "channel": channel,
@@ -109,11 +109,25 @@ class HikvisionClient:
                     "ip": _text(element, "ipAddress"),
                     "mac": _text(element, "macAddress"),
                     "firmware": _text(element, "firmwareVersion"),
-                    "online": status in {"online", "true", "1"},
-                    "status": "online" if status in {"online", "true", "1"} else status,
+                    "online": False,
+                    "status": "unknown",
                 }
             )
+        results = await asyncio.gather(
+            *(self.input_channel_status(channel["channel"]) for channel in channels),
+            return_exceptions=True,
+        )
+        for channel, result in zip(channels, results, strict=True):
+            if isinstance(result, Exception):
+                continue
+            channel["online"] = result
+            channel["status"] = "online" if result else "offline"
         return channels
+
+    async def input_channel_status(self, channel: int) -> bool:
+        root = await self._get_xml(f"/ContentMgmt/InputProxy/channels/{channel}/status")
+        online = (_text(root, "online") or "false").lower()
+        return online in {"true", "online", "1"}
 
     async def snapshot(self, channel: int) -> tuple[bytes, str]:
         stream_channel = channel * 100 + 1
