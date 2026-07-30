@@ -22,7 +22,8 @@ const drawerWidth = 244;
 
 const statusChip = (value: string | null | boolean) => {
   const online = value === "online" || value === true;
-  return <Chip size="small" color={online ? "success" : "default"} label={online ? "online" : value || "nieznany"} />;
+  const label = online ? "online" : value === false || value === "offline" ? "offline" : value || "nieznany";
+  return <Chip size="small" color={online ? "success" : "default"} label={label} />;
 };
 const bytes = (value: number | null) => value === null ? "—" : `${(value / 1024 ** 3).toFixed(1)} GB`;
 
@@ -97,7 +98,7 @@ function Content({ view, companies, locations, recorders, cameras, names, onRefr
   if (view === "companies") return <DataTable heads={["Nazwa", "NIP", "Utworzono"]} rows={companies.map((item) => [item.name, item.nip || "—", new Date(item.created_at).toLocaleString("pl-PL")])} />;
   if (view === "locations") return <DataTable heads={["Nazwa", "Firma", "Adres", "Miasto"]} rows={locations.map((item) => [item.name, names.company.get(item.company_id) || item.company_id, item.address || "—", item.city || "—"])} />;
   if (view === "recorders") return <DataTable heads={["Nazwa", "Lokalizacja", "Adres", "Status", "HDD", "Temperatura", "Akcje"]} rows={recorders.map((item) => [item.name, names.location.get(item.location_id) || item.location_id, `${item.ip}:${item.port}`, statusChip(item.status), `${bytes(item.hdd_free_bytes)} / ${bytes(item.hdd_total_bytes)}`, item.temperature_celsius === null ? "—" : `${item.temperature_celsius} °C`, <Stack key={item.id} direction="row"><IconButton title="Odśwież" onClick={() => onRefresh(item.id)}><RefreshIcon /></IconButton><IconButton title="Synchronizuj kamery" onClick={() => onSync(item.id)}><SyncIcon /></IconButton><IconButton title="Usuń rejestrator" color="error" onClick={() => onDelete(item)}><DeleteIcon /></IconButton></Stack>])} />;
-  return <DataTable heads={["Kanał", "Nazwa", "Rejestrator", "Model", "Status", "Snapshot"]} rows={cameras.map((item) => [item.channel, item.name, names.recorder.get(item.recorder_id) || item.recorder_id, item.model || "—", statusChip(item.online), <Button key={item.id} size="small" onClick={() => onSnapshot(item)}>Podgląd</Button>])} />;
+  return <DataTable heads={["Kanał", "Nazwa", "Rejestrator", "Adres IP", "Model", "Status", "Snapshot"]} rows={cameras.map((item) => [item.channel, item.name, names.recorder.get(item.recorder_id) || item.recorder_id, item.ip || "—", item.model || "—", statusChip(item.online), <Button key={item.id} size="small" onClick={() => onSnapshot(item)}>Podgląd</Button>])} />;
 }
 
 function DataTable({ heads, rows }: { heads: string[]; rows: ReactNode[][] }) { return <Paper sx={{ overflowX: "auto" }}><Table><TableHead><TableRow>{heads.map((head) => <TableCell key={head}>{head}</TableCell>)}</TableRow></TableHead><TableBody>{rows.map((row, index) => <TableRow key={index}>{row.map((cell, cellIndex) => <TableCell key={cellIndex}>{cell}</TableCell>)}</TableRow>)}</TableBody></Table></Paper>; }
