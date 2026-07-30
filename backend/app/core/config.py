@@ -5,6 +5,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://cammanager:change-me@db:5432/cammanager"
+    hikvision_verify_tls: bool = False
+    hikvision_request_timeout_seconds: float = 10.0
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

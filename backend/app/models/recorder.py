@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -21,5 +21,9 @@ class Recorder(Base):
     https: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str | None] = mapped_column(String(50))
+    hdd_status: Mapped[str | None] = mapped_column(String(50))
+    hdd_total_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    hdd_free_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    temperature_celsius: Mapped[float | None] = mapped_column(Float)
     location: Mapped["Location"] = relationship(back_populates="recorders")
     cameras: Mapped[list["Camera"]] = relationship(back_populates="recorder")

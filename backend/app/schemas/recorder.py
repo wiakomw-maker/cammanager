@@ -29,4 +29,8 @@ class RecorderRead(BaseModel):
     https: bool
     last_seen: datetime | None
     status: str | None
+    hdd_status: str | None
+    hdd_total_bytes: int | None
+    hdd_free_bytes: int | None
+    temperature_celsius: float | None
     model_config = ConfigDict(from_attributes=True)
