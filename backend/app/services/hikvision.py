@@ -97,3 +97,11 @@ class HikvisionService:
         camera.last_snapshot = datetime.now(timezone.utc)
         await session.commit()
         return content, media_type
+
+    async def delete_recorder(self, session: AsyncSession, recorder_id: int) -> None:
+        recorder = await self.get_recorder(session, recorder_id)
+        cameras = await session.scalars(select(Camera).where(Camera.recorder_id == recorder_id))
+        for camera in cameras:
+            await session.delete(camera)
+        await session.delete(recorder)
+        await session.commit()

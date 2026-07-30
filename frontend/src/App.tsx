@@ -6,6 +6,7 @@ import LocationsIcon from "@mui/icons-material/LocationOn";
 import RecordersIcon from "@mui/icons-material/Dns";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SyncIcon from "@mui/icons-material/Sync";
+import DeleteIcon from "@mui/icons-material/Delete";
 import {
   Alert, AppBar, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogTitle, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText, MenuItem,
@@ -35,6 +36,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<"company" | "location" | "recorder" | null>(null);
   const [snapshot, setSnapshot] = useState<Camera | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Recorder | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,6 +53,11 @@ export default function App() {
   const action = async (path: string, success: string) => {
     try { await api(path, { method: "POST" }); await load(); setError(success); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Operacja nie powiodła się."); }
+  };
+  const deleteRecorder = async () => {
+    if (!deleteTarget) return;
+    try { await api(`/recorders/${deleteTarget.id}`, { method: "DELETE" }); setDeleteTarget(null); await load(); setError("Rejestrator i przypisane kamery zostały usunięte."); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Nie udało się usunąć rejestratora."); }
   };
   const names = useMemo(() => ({
     company: new Map(companies.map((item) => [item.id, item.name])),
@@ -76,19 +83,20 @@ export default function App() {
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}><Typography variant="h4">{title}</Typography>
         {view !== "dashboard" && view !== "cameras" && <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialog(view.slice(0, -1) as "company" | "location" | "recorder")}>Dodaj</Button>}
       </Stack>
-      {loading ? <Box sx={{ textAlign: "center", py: 10 }}><CircularProgress /></Box> : <Content view={view} companies={companies} locations={locations} recorders={recorders} cameras={cameras} names={names} onRefresh={(id) => void action(`/recorders/${id}/refresh`, "Dane rejestratora odświeżone.")} onSync={(id) => void action(`/recorders/${id}/sync`, "Kamery zostały zsynchronizowane.")} onSnapshot={setSnapshot} />}
+      {loading ? <Box sx={{ textAlign: "center", py: 10 }}><CircularProgress /></Box> : <Content view={view} companies={companies} locations={locations} recorders={recorders} cameras={cameras} names={names} onRefresh={(id) => void action(`/recorders/${id}/refresh`, "Dane rejestratora odświeżone.")} onSync={(id) => void action(`/recorders/${id}/sync`, "Kamery zostały zsynchronizowane.")} onSnapshot={setSnapshot} onDelete={setDeleteTarget} />}
     </Box>
     <CreateDialog kind={dialog} companies={companies} locations={locations} onClose={() => setDialog(null)} onCreated={() => { setDialog(null); void load(); }} onError={setError} />
     <Dialog open={snapshot !== null} onClose={() => setSnapshot(null)} maxWidth="md" fullWidth><DialogTitle>Snapshot: {snapshot?.name}</DialogTitle><DialogContent>{snapshot && <Box component="img" src={snapshotUrl(snapshot.recorder_id, snapshot.id)} alt={`Snapshot ${snapshot.name}`} sx={{ display: "block", width: "100%" }} />}</DialogContent></Dialog>
+    <Dialog open={deleteTarget !== null} onClose={() => setDeleteTarget(null)}><DialogTitle>Usunąć rejestrator?</DialogTitle><DialogContent><Typography>Usunięty zostanie „{deleteTarget?.name}” oraz wszystkie przypisane do niego kamery. Tej operacji nie można cofnąć.</Typography></DialogContent><DialogActions><Button onClick={() => setDeleteTarget(null)}>Anuluj</Button><Button color="error" variant="contained" onClick={() => void deleteRecorder()}>Usuń</Button></DialogActions></Dialog>
     <Snackbar open={error !== null} autoHideDuration={5000} onClose={() => setError(null)}><Alert severity={error?.includes("odświeżone") || error?.includes("zsynchronizowane") ? "success" : "error"} onClose={() => setError(null)}>{error}</Alert></Snackbar>
   </Box>;
 }
 
-function Content({ view, companies, locations, recorders, cameras, names, onRefresh, onSync, onSnapshot }: { view: View; companies: Company[]; locations: Location[]; recorders: Recorder[]; cameras: Camera[]; names: { company: Map<number, string>; location: Map<number, string>; recorder: Map<number, string> }; onRefresh: (id: number) => void; onSync: (id: number) => void; onSnapshot: (camera: Camera) => void }) {
+function Content({ view, companies, locations, recorders, cameras, names, onRefresh, onSync, onSnapshot, onDelete }: { view: View; companies: Company[]; locations: Location[]; recorders: Recorder[]; cameras: Camera[]; names: { company: Map<number, string>; location: Map<number, string>; recorder: Map<number, string> }; onRefresh: (id: number) => void; onSync: (id: number) => void; onSnapshot: (camera: Camera) => void; onDelete: (recorder: Recorder) => void }) {
   if (view === "dashboard") return <Stack direction={{ xs: "column", md: "row" }} spacing={2}>{[["Firmy", companies.length], ["Lokalizacje", locations.length], ["Rejestratory online", recorders.filter((item) => item.status === "online").length], ["Kamery online", cameras.filter((item) => item.online).length]].map(([label, amount]) => <Paper key={String(label)} sx={{ p: 3, flex: 1 }}><Typography color="text.secondary">{label}</Typography><Typography variant="h3">{amount}</Typography></Paper>)}</Stack>;
   if (view === "companies") return <DataTable heads={["Nazwa", "NIP", "Utworzono"]} rows={companies.map((item) => [item.name, item.nip || "—", new Date(item.created_at).toLocaleString("pl-PL")])} />;
   if (view === "locations") return <DataTable heads={["Nazwa", "Firma", "Adres", "Miasto"]} rows={locations.map((item) => [item.name, names.company.get(item.company_id) || item.company_id, item.address || "—", item.city || "—"])} />;
-  if (view === "recorders") return <DataTable heads={["Nazwa", "Lokalizacja", "Adres", "Status", "HDD", "Temperatura", "Akcje"]} rows={recorders.map((item) => [item.name, names.location.get(item.location_id) || item.location_id, `${item.ip}:${item.port}`, statusChip(item.status), `${bytes(item.hdd_free_bytes)} / ${bytes(item.hdd_total_bytes)}`, item.temperature_celsius === null ? "—" : `${item.temperature_celsius} °C`, <Stack key={item.id} direction="row"><IconButton title="Odśwież" onClick={() => onRefresh(item.id)}><RefreshIcon /></IconButton><IconButton title="Synchronizuj kamery" onClick={() => onSync(item.id)}><SyncIcon /></IconButton></Stack>])} />;
+  if (view === "recorders") return <DataTable heads={["Nazwa", "Lokalizacja", "Adres", "Status", "HDD", "Temperatura", "Akcje"]} rows={recorders.map((item) => [item.name, names.location.get(item.location_id) || item.location_id, `${item.ip}:${item.port}`, statusChip(item.status), `${bytes(item.hdd_free_bytes)} / ${bytes(item.hdd_total_bytes)}`, item.temperature_celsius === null ? "—" : `${item.temperature_celsius} °C`, <Stack key={item.id} direction="row"><IconButton title="Odśwież" onClick={() => onRefresh(item.id)}><RefreshIcon /></IconButton><IconButton title="Synchronizuj kamery" onClick={() => onSync(item.id)}><SyncIcon /></IconButton><IconButton title="Usuń rejestrator" color="error" onClick={() => onDelete(item)}><DeleteIcon /></IconButton></Stack>])} />;
   return <DataTable heads={["Kanał", "Nazwa", "Rejestrator", "Model", "Status", "Snapshot"]} rows={cameras.map((item) => [item.channel, item.name, names.recorder.get(item.recorder_id) || item.recorder_id, item.model || "—", statusChip(item.online), <Button key={item.id} size="small" onClick={() => onSnapshot(item)}>Podgląd</Button>])} />;
 }
 

@@ -23,6 +23,15 @@ async def create_recorder(payload: RecorderCreate, session: DbSession) -> Record
     return await service.create(session, payload.model_dump())
 
 
+@router.delete("/{recorder_id}", status_code=204)
+async def delete_recorder(recorder_id: int, session: DbSession) -> Response:
+    try:
+        await hikvision_service.delete_recorder(session, recorder_id)
+    except RecorderNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Recorder not found") from error
+    return Response(status_code=204)
+
+
 @router.post("/{recorder_id}/refresh", response_model=RecorderRead)
 async def refresh_recorder(recorder_id: int, session: DbSession) -> Recorder:
     try:
