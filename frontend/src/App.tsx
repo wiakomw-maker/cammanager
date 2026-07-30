@@ -116,7 +116,22 @@ function UsersDialog({ recorder, onClose, onError }: { recorder: Recorder | null
   const [revealed, setRevealed] = useState<string | null>(null);
   useEffect(() => { if (!recorder) return; setLoading(true); api<RecorderUser[]>(`/recorders/${recorder.id}/users`).then(setUsers).catch((cause: unknown) => onError(cause instanceof Error ? cause.message : "Nie udało się pobrać użytkowników.")).finally(() => setLoading(false)); }, [recorder, onError]);
   const reveal = (username: string) => { if (!recorder) return; api<{ password: string }>(`/recorders/${recorder.id}/users/${encodeURIComponent(username)}/reveal-password`, { method: "POST" }).then((data) => setRevealed(data.password)).catch((cause: unknown) => onError(cause instanceof Error ? cause.message : "Nie udało się odczytać hasła.")); };
-  return <Dialog open={recorder !== null} onClose={onClose} fullWidth maxWidth="sm"><DialogTitle>Użytkownicy: {recorder?.name}</DialogTitle><DialogContent><Stack spacing={2}>{revealed && <Alert severity="warning">Hasło: {revealed}</Alert>}{loading ? <Box sx={{ textAlign: "center", py: 3 }}><CircularProgress /></Box> : <DataTable heads={["ID", "Nazwa użytkownika", "Rola", "Hasło"]} rows={users.map((item) => [item.id || "—", item.username, item.level || "—", item.has_stored_password ? <Button key={item.username} size="small" onClick={() => reveal(item.username)}>Pokaż</Button> : "nie zapisano"])} /></Stack></DialogContent><DialogActions><Button onClick={onClose}>Zamknij</Button></DialogActions></Dialog>;
+  const rows: ReactNode[][] = users.map((item) => [
+    item.id || "—",
+    item.username,
+    item.level || "—",
+    item.has_stored_password ? <Button key={item.username} size="small" onClick={() => reveal(item.username)}>Pokaż</Button> : "nie zapisano",
+  ]);
+  return (
+    <Dialog open={recorder !== null} onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>Użytkownicy: {recorder?.name}</DialogTitle>
+      <DialogContent><Stack spacing={2}>
+        {revealed && <Alert severity="warning">Hasło: {revealed}</Alert>}
+        {loading ? <Box sx={{ textAlign: "center", py: 3 }}><CircularProgress /></Box> : <DataTable heads={["ID", "Nazwa użytkownika", "Rola", "Hasło"]} rows={rows} />}
+      </Stack></DialogContent>
+      <DialogActions><Button onClick={onClose}>Zamknij</Button></DialogActions>
+    </Dialog>
+  );
 }
 
 function BulkUsersDialog({ open, onClose, onError }: { open: boolean; onClose: () => void; onError: (message: string) => void }) {
