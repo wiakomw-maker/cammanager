@@ -9,6 +9,9 @@ from app.core.config import get_settings
 from app.hikvision.client import HikvisionClient, HikvisionConnection
 from app.models.camera import Camera
 from app.models.recorder import Recorder
+from app.models.recorder_user_credential import RecorderUserCredential
+from app.schemas.user import BulkUserCreate, BulkUserResult, RecorderUserRead
+from app.services.credentials import CredentialVault
 
 
 class RecorderNotFoundError(Exception):
@@ -16,6 +19,9 @@ class RecorderNotFoundError(Exception):
 
 
 class HikvisionService:
+    def __init__(self) -> None:
+        self._vault = CredentialVault()
+
     def _client(self, recorder: Recorder) -> HikvisionClient:
         settings = get_settings()
         return HikvisionClient(
@@ -105,3 +111,33 @@ class HikvisionService:
             await session.delete(camera)
         await session.delete(recorder)
         await session.commit()
+
+    async def users(self, session: AsyncSession, recorder_id: int) -> list[RecorderUserRead]:
+        recorder = await self.get_recorder(session, recorder_id)
+        async with self._client(recorder) as client:
+            users = await client.users()
+        stored = set(await session.scalars(select(RecorderUserCredential.username).where(RecorderUserCredential.recorder_id == recorder_id)))
+        return [RecorderUserRead(**user, has_stored_password=user["username"] in stored) for user in users]
+
+    async def reveal_user_password(self, session: AsyncSession, recorder_id: int, username: str) -> str:
+        credential = await session.scalar(select(RecorderUserCredential).where(RecorderUserCredential.recorder_id == recorder_id, RecorderUserCredential.username == username))
+        if credential is None:
+            raise RecorderNotFoundError
+        return self._vault.decrypt(credential.password_encrypted)
+
+    async def create_user_on_all(self, session: AsyncSession, payload: BulkUserCreate) -> list[BulkUserResult]:
+        recorders = list(await session.scalars(select(Recorder).order_by(Recorder.id)))
+
+        results: list[BulkUserResult] = []
+        for recorder in recorders:
+            try:
+                async with self._client(recorder) as client:
+                    await client.create_user(payload.username, payload.password, payload.user_level)
+                session.add(RecorderUserCredential(recorder_id=recorder.id, username=payload.username, user_level=payload.user_level, password_encrypted=self._vault.encrypt(payload.password)))
+                results.append(BulkUserResult(recorder_id=recorder.id, recorder_name=recorder.name, success=True, detail="User created"))
+            except httpx.HTTPError as error:
+                status = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None
+                detail = "User already exists" if status == 409 else "Unable to create user"
+                results.append(BulkUserResult(recorder_id=recorder.id, recorder_name=recorder.name, success=False, detail=detail))
+        await session.commit()
+        return results

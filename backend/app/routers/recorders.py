@@ -5,6 +5,7 @@ from app.api.deps import DbSession
 from app.models.recorder import Recorder
 from app.schemas.hikvision import CameraSyncRead
 from app.schemas.recorder import RecorderCreate, RecorderRead
+from app.schemas.user import BulkUserCreate, BulkUserCreateResponse, RecorderUserRead, RevealedPassword
 from app.services.catalog import CatalogService
 from app.services.hikvision import HikvisionService, RecorderNotFoundError
 
@@ -23,6 +24,11 @@ async def create_recorder(payload: RecorderCreate, session: DbSession) -> Record
     return await service.create(session, payload.model_dump())
 
 
+@router.post("/bulk-users", response_model=BulkUserCreateResponse)
+async def create_user_on_all_recorders(payload: BulkUserCreate, session: DbSession) -> BulkUserCreateResponse:
+    return BulkUserCreateResponse(results=await hikvision_service.create_user_on_all(session, payload))
+
+
 @router.delete("/{recorder_id}", status_code=204)
 async def delete_recorder(recorder_id: int, session: DbSession) -> Response:
     try:
@@ -30,6 +36,26 @@ async def delete_recorder(recorder_id: int, session: DbSession) -> Response:
     except RecorderNotFoundError as error:
         raise HTTPException(status_code=404, detail="Recorder not found") from error
     return Response(status_code=204)
+
+
+@router.get("/{recorder_id}/users", response_model=list[RecorderUserRead])
+async def list_recorder_users(recorder_id: int, session: DbSession) -> list[RecorderUserRead]:
+    try:
+        return await hikvision_service.users(session, recorder_id)
+    except RecorderNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Recorder not found") from error
+    except httpx.HTTPError as error:
+        raise HTTPException(status_code=502, detail="Unable to retrieve Hikvision users") from error
+
+
+@router.post("/{recorder_id}/users/{username}/reveal-password", response_model=RevealedPassword)
+async def reveal_recorder_user_password(recorder_id: int, username: str, session: DbSession) -> RevealedPassword:
+    try:
+        return RevealedPassword(password=await hikvision_service.reveal_user_password(session, recorder_id, username))
+    except RecorderNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Stored password not found") from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
 
 
 @router.post("/{recorder_id}/refresh", response_model=RecorderRead)

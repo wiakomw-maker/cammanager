@@ -65,6 +65,15 @@ class HikvisionClient:
         response.raise_for_status()
         return ElementTree.fromstring(response.content)
 
+    async def _send_xml(self, method: str, path: str, root: ElementTree.Element) -> None:
+        response = await self._client.request(
+            method,
+            f"{self._base_url}{path}",
+            content=ElementTree.tostring(root, encoding="utf-8", xml_declaration=True),
+            headers={"Content-Type": "application/xml", "Accept": "application/xml"},
+        )
+        response.raise_for_status()
+
     async def device_info(self) -> dict[str, str | None]:
         root = await self._get_xml("/System/deviceInfo")
         return {
@@ -134,3 +143,21 @@ class HikvisionClient:
         response = await self._client.get(f"{self._base_url}/Streaming/channels/{stream_channel}/picture")
         response.raise_for_status()
         return response.content, response.headers.get("content-type", "image/jpeg")
+
+    async def users(self) -> list[dict[str, str | None]]:
+        root = await self._get_xml("/Security/users")
+        users: list[dict[str, str | None]] = []
+        for element in root.iter():
+            if _tag_name(element) != "User":
+                continue
+            username = _text(element, "userName")
+            if username:
+                users.append({"id": _text(element, "id"), "username": username, "level": _text(element, "userLevel")})
+        return users
+
+    async def create_user(self, username: str, password: str, user_level: str) -> None:
+        root = ElementTree.Element("User", xmlns="http://www.hikvision.com/ver20/XMLSchema")
+        ElementTree.SubElement(root, "userName").text = username
+        ElementTree.SubElement(root, "password").text = password
+        ElementTree.SubElement(root, "userLevel").text = user_level
+        await self._send_xml("POST", "/Security/users", root)
